@@ -30,10 +30,13 @@ SOFTWARE.
 #include <string.h>
 #include <esp_wifi.h>
 #include <esp_netif.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_system.h"
-#include "esp_log.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_system.h>
+#include <esp_log.h>
+#include <lwip/ip4_addr.h>
+#include <esp_wifi_types.h>
+#include <esp_netif_types.h>
 
 #include "wifi_manager.h"
 
@@ -47,7 +50,7 @@ static const char TAG[] = "main";
 void monitoring_task(void *pvParameter)
 {
 	for(;;){
-		ESP_LOGI(TAG, "free heap: %d",esp_get_free_heap_size());
+		ESP_LOGI(TAG, "free heap: %lu", esp_get_free_heap_size());
 		vTaskDelay( pdMS_TO_TICKS(10000) );
 	}
 }

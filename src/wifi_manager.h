@@ -34,6 +34,9 @@ Contains the freeRTOS task and all necessary support
 
 #include <stdbool.h>
 
+#include <esp_wifi_types.h>
+#include <esp_netif_types.h>
+
 
 #ifdef __cplusplus
 extern "C" {

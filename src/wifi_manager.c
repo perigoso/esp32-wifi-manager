@@ -34,25 +34,25 @@ Contains the freeRTOS task and all necessary support
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "esp_system.h"
+#include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
 #include <freertos/event_groups.h>
 #include <freertos/timers.h>
 #include <http_app.h>
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_netif.h"
-#include "esp_wifi_types.h"
-#include "esp_log.h"
-#include "nvs.h"
-#include "nvs_flash.h"
-#include "mdns.h"
-#include "lwip/api.h"
-#include "lwip/err.h"
-#include "lwip/netdb.h"
-#include "lwip/ip4_addr.h"
+#include <esp_wifi.h>
+#include <esp_event.h>
+#include <esp_netif.h>
+#include <esp_wifi_types.h>
+#include <esp_log.h>
+#include <nvs.h>
+#include <nvs_flash.h>
+#include <mdns.h>
+#include <lwip/api.h>
+#include <lwip/err.h>
+#include <lwip/netdb.h>
+#include <lwip/ip4_addr.h>
 
 
 #include "json.h"
@@ -141,6 +141,9 @@ const int WIFI_MANAGER_SCAN_BIT = BIT7;
 /* @brief When set, means user requested for a disconnect */
 const int WIFI_MANAGER_REQUEST_DISCONNECT_BIT = BIT8;
 
+// MPC added from https://github.com/tonyp7/esp32-wifi-manager/issues/110#issuecomment-1018650169
+/* @brief Set under the "WM_ORDER_CONNECT_STA" case and clear under the "EVENT_STA_DISCONNECTED" case. */
+const int WIFI_MANAGER_REQUEST_ORDER_CONNECT_STA_BIT = BIT9;
 
 
 void wifi_manager_timer_retry_cb( TimerHandle_t xTimer ){
@@ -657,7 +660,7 @@ static void wifi_manager_event_handler(void* arg, esp_event_base_t event_base, i
 			*wifi_event_sta_disconnected =  *( (wifi_event_sta_disconnected_t*)event_data );
 
 			/* if a DISCONNECT message is posted while a scan is in progress this scan will NEVER end, causing scan to never work again. For this reason SCAN_BIT is cleared too */
-			xEventGroupClearBits(wifi_manager_event_group, WIFI_MANAGER_WIFI_CONNECTED_BIT | WIFI_MANAGER_SCAN_BIT);
+			xEventGroupClearBits(wifi_manager_event_group, WIFI_MANAGER_WIFI_CONNECTED_BIT | WIFI_MANAGER_SCAN_BIT | WIFI_MANAGER_REQUEST_ORDER_CONNECT_STA_BIT);
 
 			/* post disconnect event with reason code */
 			wifi_manager_send_message(WM_EVENT_STA_DISCONNECTED, (void*)wifi_event_sta_disconnected );
@@ -1015,9 +1018,13 @@ void wifi_manager( void * pvParameters ){
 
 				/* if a scan is already in progress this message is simply ignored thanks to the WIFI_MANAGER_SCAN_BIT uxBit */
 				uxBits = xEventGroupGetBits(wifi_manager_event_group);
-				if(! (uxBits & WIFI_MANAGER_SCAN_BIT) ){
-					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_SCAN_BIT);
-					ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, false));
+				if(!(uxBits & WIFI_MANAGER_REQUEST_ORDER_CONNECT_STA_BIT))
+				{
+					if(! (uxBits & WIFI_MANAGER_SCAN_BIT) ){
+						xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_SCAN_BIT);
+						ESP_ERROR_CHECK(esp_wifi_disconnect());
+						ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, false));
+					}
 				}
 
 				/* callback */
@@ -1050,10 +1057,10 @@ void wifi_manager( void * pvParameters ){
 				 * by the wifi_manager.
 				 * */
 				if((BaseType_t)msg.param == CONNECTION_REQUEST_USER) {
-					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_REQUEST_STA_CONNECT_BIT);
+					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_REQUEST_STA_CONNECT_BIT | WIFI_MANAGER_REQUEST_ORDER_CONNECT_STA_BIT);
 				}
 				else if((BaseType_t)msg.param == CONNECTION_REQUEST_RESTORE_CONNECTION) {
-					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_REQUEST_RESTORE_STA_BIT);
+					xEventGroupSetBits(wifi_manager_event_group, WIFI_MANAGER_REQUEST_RESTORE_STA_BIT | WIFI_MANAGER_REQUEST_ORDER_CONNECT_STA_BIT);
 				}
 
 				uxBits = xEventGroupGetBits(wifi_manager_event_group);
