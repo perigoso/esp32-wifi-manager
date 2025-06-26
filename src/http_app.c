@@ -114,6 +114,20 @@ esp_err_t http_app_set_handler_hook( httpd_method_t method,  esp_err_t (*handler
 
 }
 
+// HTTP Error (404) Handler - Redirects all requests to the root page
+static esp_err_t captive_portal_handler(httpd_req_t *req, httpd_err_code_t /* err */)
+{
+	/* Captive Portal functionality */
+	ESP_LOGI(TAG, "Captive portal redirect");
+
+	/* 302 Redirect to IP of the access point */
+    httpd_resp_set_status(req, http_302_hdr);
+	httpd_resp_set_hdr(req, http_location_hdr, http_redirect_url);
+    /* iOS requires content in the response to detect a captive portal, simply redirecting is not sufficient. */
+    httpd_resp_send(req, http_302_hdr, strlen(http_302_hdr));
+
+    return ESP_OK;
+}
 
 static esp_err_t http_server_delete_handler(httpd_req_t *req){
 
@@ -237,10 +251,7 @@ static esp_err_t http_server_get_handler(httpd_req_t *req){
 	if (host != NULL && !strstr(host, DEFAULT_AP_IP) && !access_from_sta_ip) {
 
 		/* Captive Portal functionality */
-		/* 302 Redirect to IP of the access point */
-		httpd_resp_set_status(req, http_302_hdr);
-		httpd_resp_set_hdr(req, http_location_hdr, http_redirect_url);
-		httpd_resp_send(req, NULL, 0);
+		ret = captive_portal_handler(req, HTTPD_404_NOT_FOUND);
 
 	}
 	else{
@@ -336,23 +347,9 @@ static esp_err_t http_server_get_handler(httpd_req_t *req){
 }
 
 /* URI wild card for any GET request */
-static const httpd_uri_t http_server_get_request = {
-    .uri       = "*",
-    .method    = HTTP_GET,
-    .handler   = http_server_get_handler
-};
-
-static const httpd_uri_t http_server_post_request = {
-	.uri	= "*",
-	.method = HTTP_POST,
-	.handler = http_server_post_handler
-};
-
-static const httpd_uri_t http_server_delete_request = {
-	.uri	= "*",
-	.method = HTTP_DELETE,
-	.handler = http_server_delete_handler
-};
+static httpd_uri_t http_server_get_request;
+static httpd_uri_t http_server_post_request;
+static httpd_uri_t http_server_delete_request;
 
 
 void http_app_stop(){
@@ -364,6 +361,10 @@ void http_app_stop(){
 		if(http_root_url) {
 			free(http_root_url);
 			http_root_url = NULL;
+		}
+		if(http_root_wildcard_url){
+			free(http_root_wildcard_url);
+			http_root_wildcard_url = NULL;
 		}
 		if(http_redirect_url){
 			free(http_redirect_url);
@@ -405,12 +406,21 @@ static char* http_app_generate_url(const char* page){
 	char* ret;
 
 	int root_len = strlen(WEBAPP_LOCATION);
-	const size_t url_sz = sizeof(char) * ( (root_len+1) + ( strlen(page) + 1) );
+	const size_t url_sz = sizeof(char) * ( (root_len+1) + ( strlen(page) + 1) + 1);
 
 	ret = malloc(url_sz);
 	memset(ret, 0x00, url_sz);
+
 	strcpy(ret, WEBAPP_LOCATION);
-	ret = strcat(ret, page);
+	if(root_len > 1)
+	{
+		strcat(ret, "/");
+		if(strlen(page) == 1U && page[0] == '*')
+		{
+			strcat(ret, "?");
+		}
+	}
+	strcat(ret, page);
 
 	return ret;
 }
@@ -433,6 +443,7 @@ void http_app_start(bool lru_purge_enable){
 			int root_len = strlen(WEBAPP_LOCATION);
 
 			/* all the pages */
+			const char wildcard[] = "*";
 			const char page_js[] = "code.js";
 			const char page_css[] = "style.css";
 			const char page_connect[] = "connect.json";
@@ -458,21 +469,41 @@ void http_app_start(bool lru_purge_enable){
 			}
 
 			/* generate the other pages URLs*/
+			http_root_wildcard_url = http_app_generate_url(wildcard);
 			http_js_url = http_app_generate_url(page_js);
 			http_css_url = http_app_generate_url(page_css);
 			http_connect_url = http_app_generate_url(page_connect);
 			http_ap_url = http_app_generate_url(page_ap);
 			http_status_url = http_app_generate_url(page_status);
-
 		}
 
 		err = httpd_start(&httpd_handle, &config);
 
 	    if (err == ESP_OK) {
 	        ESP_LOGI(TAG, "Registering URI handlers");
+
+			http_server_get_request = (httpd_uri_t){
+				.uri       = http_root_wildcard_url,
+				.method    = HTTP_GET,
+				.handler   = http_server_get_handler
+			};
 	        httpd_register_uri_handler(httpd_handle, &http_server_get_request);
+
+			http_server_post_request = (httpd_uri_t){
+				.uri	= http_root_wildcard_url,
+				.method = HTTP_POST,
+				.handler = http_server_post_handler
+			};
 	        httpd_register_uri_handler(httpd_handle, &http_server_post_request);
+
+			http_server_delete_request = (httpd_uri_t){
+				.uri	= http_root_wildcard_url,
+				.method = HTTP_DELETE,
+				.handler = http_server_delete_handler
+			};
 	        httpd_register_uri_handler(httpd_handle, &http_server_delete_request);
+
+ 			httpd_register_err_handler(httpd_handle, HTTPD_404_NOT_FOUND, captive_portal_handler);
 	    }
 	}
 

@@ -26,7 +26,7 @@ config WIFI_MANAGER_SHUTDOWN_AP_TIMER
 
 config WEBAPP_LOCATION
     string "Defines the URL where the wifi manager is located"
-    default "/"
+    default "/wifi"
     help
     This parameter helps you relocate the wifimanager to another URL, for instance /wifimanager/ The trailing slash is important and should be included
 
