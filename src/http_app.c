@@ -57,8 +57,11 @@ static httpd_handle_t httpd_handle = NULL;
 esp_err_t (*custom_get_httpd_uri_handler)(httpd_req_t *r) = NULL;
 esp_err_t (*custom_post_httpd_uri_handler)(httpd_req_t *r) = NULL;
 
+http_app_register_uri_hook_t register_uri_hook = NULL;
+
 /* strings holding the URLs of the wifi manager */
 static char* http_root_url = NULL;
+static char* http_root_wildcard_url = NULL;
 static char* http_redirect_url = NULL;
 static char* http_js_url = NULL;
 static char* http_css_url = NULL;
@@ -97,6 +100,9 @@ const static char http_pragma_hdr[] = "Pragma";
 const static char http_pragma_no_cache[] = "no-cache";
 
 
+void http_app_set_register_uri_hook(http_app_register_uri_hook_t hook) {
+	register_uri_hook = hook;
+}
 
 esp_err_t http_app_set_handler_hook( httpd_method_t method,  esp_err_t (*handler)(httpd_req_t *r)  ){
 
@@ -504,6 +510,11 @@ void http_app_start(bool lru_purge_enable){
 	        httpd_register_uri_handler(httpd_handle, &http_server_delete_request);
 
  			httpd_register_err_handler(httpd_handle, HTTPD_404_NOT_FOUND, captive_portal_handler);
+
+			if(register_uri_hook != NULL)
+			{
+				register_uri_hook(httpd_handle);
+			}
 	    }
 	}
 

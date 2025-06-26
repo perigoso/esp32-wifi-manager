@@ -48,6 +48,7 @@ extern "C" {
  */
 #define WEBAPP_LOCATION 					CONFIG_WEBAPP_LOCATION
 
+typedef esp_err_t(*http_app_register_uri_hook_t)(httpd_handle_t);
 
 /** 
  * @brief spawns the http server 
@@ -58,6 +59,8 @@ void http_app_start(bool lru_purge_enable);
  * @brief stops the http server 
  */
 void http_app_stop();
+
+void http_app_set_register_uri_hook(http_app_register_uri_hook_t hook);
 
 /** 
  * @brief sets a hook into the wifi manager URI handlers. Setting the handler to NULL disables the hook.
