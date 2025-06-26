@@ -433,6 +433,14 @@ static char* http_app_generate_url(const char* page){
 
 void http_app_start(bool lru_purge_enable){
 
+    /*
+        Turn of warnings from HTTP server as redirecting traffic will yield
+        lots of invalid requests
+    */
+    esp_log_level_set("httpd_uri", ESP_LOG_ERROR);
+    esp_log_level_set("httpd_txrx", ESP_LOG_ERROR);
+    esp_log_level_set("httpd_parse", ESP_LOG_ERROR);
+
 	esp_err_t err;
 
 	if(httpd_handle == NULL){
